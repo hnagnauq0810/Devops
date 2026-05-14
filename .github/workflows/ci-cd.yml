@@ -68,7 +68,7 @@ jobs:
 
   sonarqube:
     name: SonarQube scan and quality gate
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     needs: test
     steps:
       - name: Checkout repository
@@ -83,7 +83,7 @@ jobs:
           path: .
 
       - name: Run SonarQube analysis and wait for Quality Gate
-        uses: SonarSource/sonarqube-scan-action@v5
+        uses: SonarSource/sonarqube-scan-action@v6
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
