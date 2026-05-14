@@ -145,3 +145,5 @@ Nên nộp toàn bộ repository này, kèm ảnh chụp hoặc log chứng minh
 - Rollback script hoạt động
 
 Phần trả lời lý thuyết nằm trong `docs/answers.md`.
+
+abcdefghijk
