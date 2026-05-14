@@ -84,7 +84,14 @@ jobs:
 
       - name: Start local SonarQube on self-hosted runner
         shell: powershell
-        run: docker compose -f docker-compose.sonar.yml up -d
+        run: |
+          $existing = docker ps -a --filter "name=^sonarqube$" --format "{{.Names}}"
+          if ($existing -eq "sonarqube") {
+            Write-Host "Found existing 'sonarqube' container. Reusing it."
+            docker start sonarqube | Out-Null
+          } else {
+            docker compose -f docker-compose.sonar.yml up -d
+          }
 
       - name: Wait until SonarQube is ready
         shell: powershell
