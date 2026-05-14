@@ -146,4 +146,3 @@ Nên nộp toàn bộ repository này, kèm ảnh chụp hoặc log chứng minh
 
 Phần trả lời lý thuyết nằm trong `docs/answers.md`.
 
-abcdefghijk
