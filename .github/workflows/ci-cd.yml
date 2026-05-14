@@ -9,7 +9,7 @@ on:
 env:
   PYTHON_VERSION: "3.11"
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  IMAGE_NAME: hnagnauq0810/devops
 
 permissions:
   contents: read
@@ -224,14 +224,30 @@ jobs:
             $greenImageTag = $env:IMAGE_TAG
           }
 
+          $env:IMAGE_NAME = $env:IMAGE_NAME.ToLowerInvariant()
           $imageRef = "${env:IMAGE_NAME}:$($env:IMAGE_TAG)"
           Write-Host "Deploying image $imageRef to $targetColor environment"
           docker pull $imageRef
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to pull image: $imageRef"
+          }
 
           $env:BLUE_IMAGE_TAG = $blueImageTag
           $env:GREEN_IMAGE_TAG = $greenImageTag
 
-          docker compose -f $composeFile up -d nginx
+          $existingNginx = docker ps -a --filter "name=^fastapi_nginx$" --format "{{.Names}}"
+          if ($existingNginx -eq "fastapi_nginx") {
+            docker start fastapi_nginx | Out-Null
+          } else {
+            docker compose -f $composeFile up -d nginx
+          }
+
+          $targetContainerName = "fastapi_$targetColor"
+          $existingTarget = docker ps -a --filter "name=^$targetContainerName$" --format "{{.Names}}"
+          if ($existingTarget -eq $targetContainerName) {
+            docker rm -f $targetContainerName | Out-Null
+          }
+
           docker compose -f $composeFile up -d --no-deps "app_$targetColor"
 
           $cid = docker compose -f $composeFile ps -q "app_$targetColor"
