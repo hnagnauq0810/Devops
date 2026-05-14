@@ -115,8 +115,15 @@ jobs:
       - name: Run SonarScanner in Docker and wait Quality Gate
         shell: powershell
         run: |
+          $networkName = "devops_default"
+          $networkExists = docker network ls --format "{{.Name}}" | Select-String -SimpleMatch $networkName
+          if (-not $networkExists) {
+            throw "Docker network '$networkName' not found. Make sure SonarQube compose stack is up."
+          }
+
           docker run --rm `
-            -e SONAR_HOST_URL="${{ secrets.SONAR_HOST_URL }}" `
+            --network $networkName `
+            -e SONAR_HOST_URL="http://sonarqube:9000" `
             -e SONAR_TOKEN="${{ secrets.SONAR_TOKEN }}" `
             -v "${{ github.workspace }}:/usr/src" `
             -w /usr/src `
