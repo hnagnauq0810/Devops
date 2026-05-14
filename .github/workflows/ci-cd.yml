@@ -190,25 +190,100 @@ jobs:
           IMAGE_TAG: sha-${{ github.sha }}
           APP_PORT: "8080"
         run: |
-          $bashCandidates = @(
-            "$env:ProgramFiles\Git\bin\bash.exe",
-            "$env:ProgramFiles\Git\usr\bin\bash.exe",
-            "$env:LocalAppData\Programs\Git\bin\bash.exe",
-            "$env:LocalAppData\Programs\Git\usr\bin\bash.exe",
-            "$env:ProgramFiles(x86)\Git\bin\bash.exe",
-            "$env:ProgramFiles(x86)\Git\usr\bin\bash.exe"
-          )
-          $bashPath = $bashCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
-          if (-not $bashPath) {
-            $cmd = Get-Command bash -ErrorAction SilentlyContinue
-            if ($cmd) {
-              $bashPath = $cmd.Source
+          $ErrorActionPreference = "Stop"
+
+          $composeFile = "docker-compose.bluegreen.yml"
+          $stateFile = ".deploy-state"
+          $activeColor = "none"
+          $blueImageTag = "latest"
+          $greenImageTag = "latest"
+
+          if (Test-Path $stateFile) {
+            Get-Content $stateFile | ForEach-Object {
+              if ($_ -match "^([^=]+)=(.*)$") {
+                $key = $matches[1]
+                $value = $matches[2]
+                switch ($key) {
+                  "ACTIVE_COLOR" { $activeColor = $value }
+                  "BLUE_IMAGE_TAG" { $blueImageTag = $value }
+                  "GREEN_IMAGE_TAG" { $greenImageTag = $value }
+                }
+              }
             }
           }
-          if (-not $bashPath) {
-            throw "Git Bash was not found on this runner. Install Git for Windows or update the bash path in workflow."
+
+          if ($activeColor -eq "blue") {
+            $targetColor = "green"
+          } else {
+            $targetColor = "blue"
           }
 
-          docker pull "$env:IMAGE_NAME:$env:IMAGE_TAG"
+          if ($targetColor -eq "blue") {
+            $blueImageTag = $env:IMAGE_TAG
+          } else {
+            $greenImageTag = $env:IMAGE_TAG
+          }
 
-          & $bashPath -lc "cd '$env:GITHUB_WORKSPACE' && chmod +x deploy/*.sh && ./deploy/blue-green-deploy.sh '$env:IMAGE_TAG'"
+          $imageRef = "${env:IMAGE_NAME}:$($env:IMAGE_TAG)"
+          Write-Host "Deploying image $imageRef to $targetColor environment"
+          docker pull $imageRef
+
+          $env:BLUE_IMAGE_TAG = $blueImageTag
+          $env:GREEN_IMAGE_TAG = $greenImageTag
+
+          docker compose -f $composeFile up -d nginx
+          docker compose -f $composeFile up -d --no-deps "app_$targetColor"
+
+          $cid = docker compose -f $composeFile ps -q "app_$targetColor"
+          if ([string]::IsNullOrWhiteSpace($cid)) {
+            throw "Could not find container for app_$targetColor"
+          }
+
+          Write-Host "Waiting for app_$targetColor health check..."
+          for ($i = 1; $i -le 40; $i++) {
+            $status = docker inspect --format "{{if .State.Health}}{{.State.Health.Status}}{{else}}no-healthcheck{{end}}" $cid
+            if ($status -eq "healthy") {
+              Write-Host "app_$targetColor is healthy"
+              break
+            }
+            if ($status -eq "unhealthy") {
+              docker logs $cid --tail 80
+              throw "app_$targetColor became unhealthy"
+            }
+            Start-Sleep -Seconds 3
+            if ($i -eq 40) {
+              docker logs $cid --tail 80
+              throw "Timed out waiting for app_$targetColor to become healthy"
+            }
+          }
+
+          $upstream = "fastapi_${targetColor}:8000"
+          @"
+server {
+    listen 80;
+    server_name _;
+
+    resolver 127.0.0.11 valid=10s ipv6=off;
+    set `$upstream $upstream;
+
+    location / {
+        proxy_pass http://`$upstream;
+        proxy_http_version 1.1;
+        proxy_set_header Host `$host;
+        proxy_set_header X-Real-IP `$remote_addr;
+        proxy_set_header X-Forwarded-For `$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto `$scheme;
+    }
+}
+"@ | Set-Content -Path "deploy/nginx/default.conf" -NoNewline
+
+          docker compose -f $composeFile exec -T nginx nginx -s reload
+
+          @(
+            "ACTIVE_COLOR=$targetColor"
+            "BLUE_IMAGE_TAG=$blueImageTag"
+            "GREEN_IMAGE_TAG=$greenImageTag"
+          ) | Set-Content -Path $stateFile
+
+          Invoke-WebRequest -UseBasicParsing -Uri ("http://127.0.0.1:{0}/health" -f $env:APP_PORT) | Out-Null
+          Write-Host "Deployment succeeded. Active color: $targetColor"
