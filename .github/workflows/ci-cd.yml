@@ -192,9 +192,19 @@ jobs:
         run: |
           $bashCandidates = @(
             "$env:ProgramFiles\Git\bin\bash.exe",
-            "$env:ProgramFiles\Git\usr\bin\bash.exe"
+            "$env:ProgramFiles\Git\usr\bin\bash.exe",
+            "$env:LocalAppData\Programs\Git\bin\bash.exe",
+            "$env:LocalAppData\Programs\Git\usr\bin\bash.exe",
+            "$env:ProgramFiles(x86)\Git\bin\bash.exe",
+            "$env:ProgramFiles(x86)\Git\usr\bin\bash.exe"
           )
           $bashPath = $bashCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $bashPath) {
+            $cmd = Get-Command bash -ErrorAction SilentlyContinue
+            if ($cmd) {
+              $bashPath = $cmd.Source
+            }
+          }
           if (-not $bashPath) {
             throw "Git Bash was not found on this runner. Install Git for Windows or update the bash path in workflow."
           }
