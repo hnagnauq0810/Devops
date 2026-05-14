@@ -121,8 +121,8 @@ jobs:
             -v "${{ github.workspace }}:/usr/src" `
             -w /usr/src `
             sonarsource/sonar-scanner-cli `
-            -Dsonar.qualitygate.wait=true `
-            -Dsonar.qualitygate.timeout=300
+            --define "sonar.qualitygate.wait=true" `
+            --define "sonar.qualitygate.timeout=300"
 
   build:
     name: Build and push Docker image
