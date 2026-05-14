@@ -258,24 +258,24 @@ jobs:
           }
 
           $upstream = "fastapi_${targetColor}:8000"
-          @"
-server {
-    listen 80;
-    server_name _;
-
-    resolver 127.0.0.11 valid=10s ipv6=off;
-    set `$upstream $upstream;
-
-    location / {
-        proxy_pass http://`$upstream;
-        proxy_http_version 1.1;
-        proxy_set_header Host `$host;
-        proxy_set_header X-Real-IP `$remote_addr;
-        proxy_set_header X-Forwarded-For `$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto `$scheme;
-    }
-}
-"@ | Set-Content -Path "deploy/nginx/default.conf" -NoNewline
+          @(
+            "server {"
+            "    listen 80;"
+            "    server_name _;"
+            ""
+            "    resolver 127.0.0.11 valid=10s ipv6=off;"
+            "    set `$upstream $upstream;"
+            ""
+            "    location / {"
+            "        proxy_pass http://`$upstream;"
+            "        proxy_http_version 1.1;"
+            "        proxy_set_header Host `$host;"
+            "        proxy_set_header X-Real-IP `$remote_addr;"
+            "        proxy_set_header X-Forwarded-For `$proxy_add_x_forwarded_for;"
+            "        proxy_set_header X-Forwarded-Proto `$scheme;"
+            "    }"
+            "}"
+          ) | Set-Content -Path "deploy/nginx/default.conf"
 
           docker compose -f $composeFile exec -T nginx nginx -s reload
 
