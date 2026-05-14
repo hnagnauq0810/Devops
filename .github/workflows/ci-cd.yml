@@ -293,7 +293,11 @@ jobs:
             "}"
           ) | Set-Content -Path "deploy/nginx/default.conf"
 
-          docker compose -f $composeFile exec -T nginx nginx -s reload
+          $nginxRunning = docker ps --filter "name=^fastapi_nginx$" --format "{{.Names}}"
+          if ($nginxRunning -ne "fastapi_nginx") {
+            docker start fastapi_nginx | Out-Null
+          }
+          docker exec fastapi_nginx nginx -s reload
 
           @(
             "ACTIVE_COLOR=$targetColor"
